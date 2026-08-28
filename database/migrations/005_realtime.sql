@@ -1,0 +1,4 @@
+-- Realtime: Supabase publication removed. FinSense uses FastAPI WebSocket at /api/v1/ws
+-- Previously: alter publication supabase_realtime ...
+-- Now: WebSocket via app/api/v1/ws.py with Neon/FastAPI
+-- No Supabase auth - React -> FastAPI -> Neon PostgreSQL

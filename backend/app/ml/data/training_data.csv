@@ -1,0 +1,61 @@
+description,merchant,amount,payment_method,category
+Swiggy food order,Swiggy,450,UPI,Food
+Zomato delivery,Zomato,320,UPI,Food
+Domino's pizza,Domino's,599,Card,Food
+Starbucks coffee,Starbucks,380,UPI,Food
+McDonald's burger,McDonald's,250,Cash,Food
+Amazon purchase,Amazon,1299,Card,Shopping
+Flipkart order,Flipkart,899,UPI,Shopping
+Myntra clothing,Myntra,2499,Card,Shopping
+Decathlon sports,Decathlon,1999,Card,Shopping
+IKEA furniture,IKEA,4500,Card,Shopping
+Uber trip,Uber,230,UPI,Transport
+Ola cab,Ola,180,UPI,Transport
+Metro recharge,Metro,500,UPI,Transport
+IRCTC train,IRCTC,1200,Card,Transport
+Petrol pump,HP Petrol,2000,Card,Transport
+Netflix subscription,Netflix,199,Card,Subscriptions
+Spotify premium,Spotify,119,Card,Subscriptions
+Amazon Prime,Amazon,1499,Card,Subscriptions
+YouTube premium,YouTube,129,Card,Subscriptions
+Hotstar subscription,Hotstar,299,Card,Subscriptions
+Electricity bill,BESCOM,1800,UPI,Bills
+Water bill,BWSSB,600,UPI,Bills
+Mobile recharge,Jio,299,UPI,Bills
+Gas bill,Indane,900,UPI,Bills
+Internet bill,ACT,1200,UPI,Bills
+Apollo pharmacy,Apollo,850,Card,Healthcare
+Hospital bill,Fortis,5000,Card,Healthcare
+Lab test,Dr Lal PathLabs,1200,UPI,Healthcare
+Gym membership,Cult Fit,2500,Card,Healthcare
+Medicine order,1mg,450,UPI,Healthcare
+Movie tickets,BookMyShow,600,UPI,Entertainment
+Concert tickets,PayTM,2000,Card,Entertainment
+Game purchase,Steam,1500,Card,Entertainment
+Park entry,Wonderla,800,UPI,Entertainment
+Pub bill,Toit,2500,Card,Entertainment
+Course fee,Udemy,500,Card,Education
+Book purchase,Amazon,800,Card,Education
+Tuition fee,Byju's,3000,UPI,Education
+Exam fee,NTA,1500,Card,Education
+Stationery,Staples,600,Cash,Education
+Flight booking,IndiGo,5000,Card,Travel
+Hotel booking,OYO,3000,Card,Travel
+Bus ticket,RedBus,800,UPI,Travel
+Travel agency,Makemytrip,7000,Card,Travel
+Cab travel,Uber,1500,Card,Travel
+SIP investment,Zerodha,5000,UPI,Investment
+Mutual fund,Groww,10000,UPI,Investment
+Stock purchase,Zerodha,15000,UPI,Investment
+Gold purchase,Tanishq,20000,Card,Investment
+FD deposit,SBI,50000,Transfer,Investment
+Rent payment,NoBroker,15000,UPI,Rent
+House rent,Owner,18000,Transfer,Rent
+PG rent,Stanza,8000,UPI,Rent
+Maintenance,Society,3000,UPI,Rent
+Salary credit,Company,50000,Transfer,Salary
+Freelance payment,Client,15000,Transfer,Salary
+Bonus credit,Company,10000,Transfer,Salary
+Interest credit,SBI,1200,Transfer,Salary
+Other expense,Misc,500,Cash,Other
+Misc purchase,General Store,300,Cash,Other

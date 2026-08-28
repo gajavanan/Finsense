@@ -1,0 +1,3 @@
+-- Seed for dev (run after creating a user, replace USER_ID)
+-- insert into transactions (user_id, date, description, amount, type, category) values
+-- ('USER_ID', current_date, 'Swiggy food order', 450, 'expense', 'Food');
