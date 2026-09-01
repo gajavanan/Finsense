@@ -10,8 +10,11 @@ import Register from './pages/auth/Register'
 import ForgotPassword from './pages/auth/ForgotPassword'
 import VerifyEmail from './pages/auth/VerifyEmail'
 import ResetPassword from './pages/auth/ResetPassword'
+import Landing from './pages/Landing'
 import Dashboard from './pages/Dashboard'
 import Transactions from './pages/Transactions'
+import AddTransaction from './pages/AddTransaction'
+import ImportStatement from './pages/ImportStatement'
 import Budgets from './pages/Budgets'
 import Goals from './pages/Goals'
 import Investments from './pages/Investments'
@@ -21,6 +24,7 @@ import FIRE from './pages/FIRE'
 import Advisor from './pages/Advisor'
 import Notifications from './pages/Notifications'
 import Settings from './pages/Settings'
+import MLModels from './pages/MLModels'
 import { Toaster } from 'sonner'
 
 const qc=new QueryClient()
@@ -37,13 +41,17 @@ function AppInner(){
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/" element={<Landing/>}/>
         <Route path="/login" element={<Login/>}/>
         <Route path="/register" element={<Register/>}/>
         <Route path="/forgot-password" element={<ForgotPassword/>}/>
         <Route path="/verify-email" element={<VerifyEmail/>}/>
         <Route path="/reset-password" element={<ResetPassword/>}/>
-        <Route path="/" element={<Protected><Layout><Dashboard/></Layout></Protected>}/>
+        <Route path="/dashboard" element={<Protected><Layout><Dashboard/></Layout></Protected>}/>
         <Route path="/transactions" element={<Protected><Layout><Transactions/></Layout></Protected>}/>
+        <Route path="/add-transaction" element={<Protected><Layout><AddTransaction/></Layout></Protected>}/>
+        <Route path="/import" element={<Protected><Layout><ImportStatement/></Layout></Protected>}/>
+        <Route path="/ml-models" element={<Protected><Layout><MLModels/></Layout></Protected>}/>
         <Route path="/budgets" element={<Protected><Layout><Budgets/></Layout></Protected>}/>
         <Route path="/goals" element={<Protected><Layout><Goals/></Layout></Protected>}/>
         <Route path="/investments" element={<Protected><Layout><Investments/></Layout></Protected>}/>

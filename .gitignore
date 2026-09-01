@@ -1,16 +1,48 @@
+# Environment files
 .env
 .env.*
 !.env.example
-node_modules/
-dist/
-.vite/
-__pycache__/
-*.pyc
-.venv/
-venv/
-*.log
-.vscode/
-.idea/
+backend/.env
+backend/.env.*
+!backend/.env.example
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+
+# Databases
 *.db
 *.sqlite
 *.sqlite3
+finsense.db
+backend/finsense.db
+
+# Dependencies and build outputs
+node_modules/
+dist/
+.vite/
+coverage/
+
+# Python cache & virtual environments
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+ENV/
+build/
+*.egg-info/
+
+# Logs and temporary files
+*.log
+temp_uploads/
+*.tmp
+archive*.zip
+
+# IDE configurations
+.vscode/
+.idea/
+
+# Preserve production ML model artifacts
+!backend/app/ml/models/*.joblib
+!backend/app/ml/models/*.pkl

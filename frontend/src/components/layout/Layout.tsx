@@ -5,15 +5,18 @@ import { LayoutDashboard, Receipt, PiggyBank, Target, TrendingUp, RefreshCw, Fil
 import { useState } from 'react'
 
 const nav = [
-  {to:'/', label:'Dashboard', icon: LayoutDashboard},
+  {to:'/dashboard', label:'Dashboard', icon: LayoutDashboard},
   {to:'/transactions', label:'Transactions', icon: Receipt},
+  {to:'/add-transaction', label:'Add Transaction', icon: Receipt},
+  {to:'/import', label:'Import Statement', icon: FileText},
+  {to:'/ml-models', label:'ML Models', icon: Sparkles},
   {to:'/budgets', label:'Budgets', icon: PiggyBank},
+  {to:'/advisor', label:'Insights', icon: Bot},
   {to:'/goals', label:'Goals', icon: Target},
   {to:'/investments', label:'Investments', icon: TrendingUp},
   {to:'/subscriptions', label:'Subscriptions', icon: RefreshCw},
   {to:'/reports', label:'Reports', icon: FileText},
   {to:'/fire', label:'FIRE', icon: Flame},
-  {to:'/advisor', label:'AI Advisor', icon: Bot},
   {to:'/notifications', label:'Notifications', icon: Bell},
 ]
 

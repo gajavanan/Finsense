@@ -1,3 +1,4 @@
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
@@ -17,14 +18,100 @@ from app.api.v1.fire import router as fire_router
 from app.api.v1.ml import router as ml_router
 from app.api.v1.ws import router as ws_router
 
-# create tables (for sqlite dev; in prod use alembic upgrade head)
+logger = logging.getLogger(__name__)
+
+# Non-destructive table initialization (creates tables if missing, never drops)
 try:
     Base.metadata.create_all(bind=engine)
 except Exception as e:
-    print(f"DB create_all failed {e}")
+    print(f"[DB] create_all notice: {e}")
 
-app = FastAPI(title="FinSense API", version="1.0.0", description="FinSense – AI-Powered Personal Finance Advisor (Neon)")
+# --- Non-destructive column verification for SQLite / PostgreSQL compatibility ---
+def _ensure_phase1_columns():
+    try:
+        from sqlalchemy import text, inspect
+        insp = inspect(engine)
+        tx_cols = [c["name"] for c in insp.get_columns("transactions")] if insp.has_table("transactions") else []
+        budget_cols = [c["name"] for c in insp.get_columns("budgets")] if insp.has_table("budgets") else []
 
+        def add_col(table, col, ddl):
+            exists = (col in tx_cols) if table == "transactions" else (col in budget_cols)
+            if not exists:
+                try:
+                    with engine.begin() as conn:
+                        conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {ddl}"))
+                    print(f"[MIGRATION] Added {table}.{col}")
+                except Exception as ex:
+                    msg = str(ex).lower()
+                    if "duplicate column" not in msg and "already exists" not in msg:
+                        print(f"[MIGRATION] {table}.{col} add skipped: {ex}")
+
+        if insp.has_table("transactions"):
+            add_col("transactions", "transaction_type", "transaction_type VARCHAR")
+            add_col("transactions", "subcategory", "subcategory VARCHAR")
+            add_col("transactions", "source", "source VARCHAR DEFAULT 'manual'")
+            add_col("transactions", "confidence_score", "confidence_score NUMERIC")
+            # In PostgreSQL BOOLEAN requires DEFAULT FALSE (not 0)
+            add_col("transactions", "is_anomaly", "is_anomaly BOOLEAN DEFAULT FALSE")
+            add_col("transactions", "updated_at", "updated_at TIMESTAMP")
+
+            # Backfill transaction_type from type where null
+            try:
+                with engine.begin() as conn:
+                    conn.execute(text("UPDATE transactions SET transaction_type=type WHERE transaction_type IS NULL AND type IS NOT NULL"))
+            except Exception:
+                pass
+
+            # Safe index creation
+            try:
+                with engine.begin() as conn:
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_transactions_user_id_date ON transactions(user_id, date)"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_transactions_category ON transactions(category)"))
+            except Exception:
+                pass
+
+        if insp.has_table("budgets"):
+            add_col("budgets", "monthly_limit", "monthly_limit NUMERIC")
+            add_col("budgets", "year", "year VARCHAR")
+            add_col("budgets", "updated_at", "updated_at TIMESTAMP")
+            try:
+                with engine.begin() as conn:
+                    conn.execute(text("UPDATE budgets SET monthly_limit=amount WHERE monthly_limit IS NULL AND amount IS NOT NULL"))
+            except Exception:
+                pass
+    except Exception as e:
+        print(f"[MIGRATION] column verification notice: {e}")
+
+_ensure_phase1_columns()
+
+app = FastAPI(
+    title="FinSense API",
+    version="1.0.0",
+    description="FinSense – AI-Powered Personal Finance Advisor"
+)
+
+@app.on_event("startup")
+async def _startup_diagnostics():
+    # Production-safe startup logging without exposing secrets or credentials
+    try:
+        db_type = "SQLite" if settings.DATABASE_URL.startswith("sqlite") else "PostgreSQL (Neon)"
+        provider = (getattr(settings, "EMAIL_PROVIDER", "smtp") or "smtp").upper()
+
+        print("==================================================")
+        print(f"[STARTUP] FinSense API starting up...")
+        print(f"[STARTUP] Environment: {settings.APP_ENV}")
+        print(f"[STARTUP] Database Engine: {db_type}")
+        print(f"[STARTUP] Frontend URL: {settings.FRONTEND_URL}")
+        print(f"[STARTUP] CORS Allowed Origins: {settings.cors_origins_list}")
+        print(f"[STARTUP] Email Provider: {provider}")
+        print(f"[STARTUP] SMTP Host: {settings.SMTP_HOST or 'NOT SET'}")
+        print(f"[STARTUP] SMTP User Configured: {bool(settings.SMTP_USERNAME)}")
+        print(f"[STARTUP] SMTP Password Configured: {bool(settings.SMTP_PASSWORD)}")
+        print("==================================================")
+    except Exception as e:
+        print(f"[STARTUP] Diagnostic log notice: {e}")
+
+# Configure CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
@@ -33,7 +120,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Health routes (both at root /health and /api/v1/health for Render/monitoring)
+app.include_router(health_router, tags=["health"])
 app.include_router(health_router, prefix="/api/v1", tags=["health"])
+
+# API v1 feature routes
 app.include_router(auth_router, prefix="/api/v1", tags=["auth"])
 app.include_router(dash_router, prefix="/api/v1", tags=["dashboard"])
 app.include_router(tx_router, prefix="/api/v1", tags=["transactions"])
@@ -50,4 +141,8 @@ app.include_router(ws_router, prefix="/api/v1", tags=["ws"])
 
 @app.get("/")
 async def root():
-    return {"message":"FinSense API running","docs":"/docs"}
+    return {
+        "name": "FinSense API",
+        "status": "running",
+        "docs": "/docs"
+    }

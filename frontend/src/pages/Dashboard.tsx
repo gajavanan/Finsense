@@ -36,10 +36,14 @@ export default function Dashboard(){
 
   const greeting = new Date().getHours()<12?'Good morning': new Date().getHours()<18?'Good afternoon':'Good evening'
   const kpis = [
-    {label:'Net Worth', value:`₹${(data.net_worth||0).toLocaleString()}`, icon: Wallet, trend: '+2.4%', good:true},
+    {label:'Total Balance', value:`₹${(data.total_balance||data.net_worth||0).toLocaleString()}`, icon: Wallet, trend: '+2.4%', good:true},
     {label:'Monthly Income', value:`₹${(data.monthly_income||0).toLocaleString()}`, icon: TrendingUp, trend: '+4.1%', good:true},
-    {label:'Monthly Spending', value:`₹${(data.monthly_expenses||0).toLocaleString()}`, icon: ArrowDownRight, trend: '-1.2%', good:false},
-    {label:'Savings Rate', value:`${data.savings_rate}%`, icon: PiggyBank, trend: data.savings_rate>20?'Healthy':'Watch', good: data.savings_rate>15},
+    {label:'Monthly Expenses', value:`₹${(data.monthly_expenses||0).toLocaleString()}`, icon: ArrowDownRight, trend: '-1.2%', good:false},
+    {label:'Savings', value:`₹${(data.monthly_savings||data.savings||0).toLocaleString()}`, icon: PiggyBank, trend: data.savings_rate>20?'Healthy':'Watch', good: data.savings_rate>15},
+  ]
+  const extraKpis = [
+    {label:"Today's Spending", value:`₹${(data.todays_spending||0).toLocaleString()}`, sub: new Date().toLocaleDateString()},
+    {label:'Savings Rate', value:`${data.savings_rate||0}%`, sub: data.savings_rate>20?'Healthy':'Watch'},
   ]
 
   return (
@@ -56,6 +60,19 @@ export default function Dashboard(){
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {kpis.map(k=>{ const Icon=k.icon; return <div key={k.label} className="kpi"><div className="flex justify-between"><div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-700 grid place-items-center"><Icon size={18}/></div><span className={`text-xs px-2 py-1 rounded-full ${k.good?'bg-green-50 text-green-700':'bg-amber-50 text-amber-700'}`}>{k.trend}</span></div><div className="text-xs text-slate-500 mt-3">{k.label}</div><div className="text-xl font-bold mt-1">{k.value}</div></div>})}
       </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {extraKpis.map(k=> <div key={k.label} className="kpi bg-amber-50/50 dark:bg-slate-800"><div className="text-xs text-slate-500">{k.label}</div><div className="text-lg font-bold mt-1">{k.value}</div><div className="text-xs text-slate-500">{k.sub}</div></div>)}
+      </div>
+      {(data.alerts?.length>0 || data.spending_alerts?.length>0) && (
+        <div className="space-y-2">
+          {(data.alerts||data.spending_alerts).map((a:any)=>
+            <div key={a.id} className="p-3 rounded-xl bg-amber-50 border border-amber-200 flex items-start gap-2 text-sm">
+              <AlertTriangle size={16} className="text-amber-600 mt-0.5"/>
+              <div><div className="font-medium">{a.category} – {a.message}</div><div className="text-xs text-slate-500">{new Date(a.created_at).toLocaleString()}</div></div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="grid lg:grid-cols-3 gap-4">
         {/* Financial Health */}

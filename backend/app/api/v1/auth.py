@@ -127,7 +127,15 @@ async def verify_email(token: str, db: Session = Depends(get_db)):
 
 @router.post("/auth/resend-verification")
 async def resend_verification(payload: ResendRequest, db: Session = Depends(get_db)):
-    email_norm = payload.email.strip().lower()
+    # Safe backend logging requested by task - do not log passwords/tokens
+    print("Resend verification request received")
+    print(f"[RESEND] Request received for endpoint /api/v1/auth/resend-verification method POST")
+    try:
+        email_norm = payload.email.strip().lower()
+    except Exception:
+        print("[RESEND] Invalid payload - missing email")
+        raise HTTPException(422, "Email is required")
+    print(f"[RESEND] Email field present: {bool(email_norm)} | Normalized email: {email_norm}")
     # Generic response to avoid email enumeration
     generic_ok = {"status": "ok", "message": "If an account exists for this email, a verification email has been sent."}
     user = db.query(User).filter(User.email == email_norm).first()

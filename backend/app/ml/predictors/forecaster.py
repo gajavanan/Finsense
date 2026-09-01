@@ -1,7 +1,11 @@
-import os, joblib, numpy as np
+import os
+from pathlib import Path
+import joblib
+import numpy as np
 from datetime import date, timedelta
 
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "..", "models", "spending_forecaster.joblib")
+_MODELS_DIR = Path(__file__).resolve().parent.parent / "models"
+MODEL_PATH = str(_MODELS_DIR / "spending_forecaster.joblib")
 
 def load_forecaster():
     if not os.path.exists(MODEL_PATH):

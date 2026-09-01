@@ -37,26 +37,35 @@ class Transaction(Base):
     __tablename__ = "transactions"
     id = Column(String, primary_key=True, default=gen_uuid)
     user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    date = Column(Date, nullable=False)
+    date = Column(Date, nullable=False, index=True)
     description = Column(String, nullable=False)
     amount = Column(Numeric(12,2), nullable=False)
-    type = Column(String, nullable=False)
-    category = Column(String)
+    type = Column(String, nullable=False)  # legacy alias for transaction_type
+    transaction_type = Column(String, nullable=True, index=True)  # income/expense - new canonical
+    category = Column(String, index=True)
+    subcategory = Column(String, nullable=True)
     payment_method = Column(String)
     merchant = Column(String)
     account = Column(String)
     notes = Column(Text)
+    source = Column(String, default="manual")  # manual, csv, bank_api
+    confidence_score = Column(Numeric(5,4), nullable=True)
+    is_anomaly = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 class Budget(Base):
     __tablename__ = "budgets"
     id = Column(String, primary_key=True, default=gen_uuid)
     user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    category = Column(String, nullable=False)
-    amount = Column(Numeric(12,2), nullable=False)
+    category = Column(String, nullable=False, index=True)
+    amount = Column(Numeric(12,2), nullable=False)  # legacy alias for monthly_limit
+    monthly_limit = Column(Numeric(12,2), nullable=True)  # new canonical per spec
     period = Column(String, default="monthly")
-    month = Column(String)
+    month = Column(String, nullable=True)  # e.g. "08" or "2026-08"
+    year = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 class Goal(Base):
     __tablename__ = "goals"
@@ -150,4 +159,15 @@ class LoginEvent(Base):
     device = Column(String)
     browser = Column(String)
     os = Column(String)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class SpendingAlert(Base):
+    __tablename__ = "spending_alerts"
+    id = Column(String, primary_key=True, default=gen_uuid)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    alert_type = Column(String, nullable=False)  # 75, 90, 100, exceeded
+    category = Column(String, nullable=False, index=True)
+    message = Column(Text, nullable=False)
+    amount = Column(Numeric(12,2), nullable=True)
+    is_read = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)

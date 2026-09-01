@@ -11,7 +11,7 @@ export default function Budgets(){
   const [rec,setRec]=useState<any>(null)
 
   const createMut=useMutation({
-    mutationFn: async(payload:any)=> (await api.post('/budgets', payload)).data,
+    mutationFn: async(payload:any)=> (await api.post('/budgets', {...payload, monthly_limit: payload.amount})).data,
     onSuccess:()=>{ toast.success('Budget created'); qc.invalidateQueries({queryKey:['budgets']}); qc.invalidateQueries({queryKey:['dashboard']}) },
     onError:(e:any)=> toast.error(e.message)
   })

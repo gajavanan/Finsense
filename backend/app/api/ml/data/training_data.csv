@@ -1,0 +1,37 @@
+description,merchant,amount,payment_method,category
+Swiggy food order,Swiggy,450,UPI,Food
+Zomato dinner,Zomato,620,UPI,Food
+Grocery purchase,Reliance Fresh,1250,Debit Card,Food
+Mobile phone purchase,Amazon,18999,Credit Card,Shopping
+Clothes purchase,Myntra,1499,UPI,Shopping
+Electronics purchase,Flipkart,3500,Credit Card,Shopping
+Cab ride,Uber,280,UPI,Transport
+Auto ride,Ola,190,UPI,Transport
+Petrol payment,Indian Oil,1500,UPI,Transport
+Electricity bill,TANGEDCO,1250,UPI,Bills
+Mobile recharge,Jio,299,UPI,Bills
+Broadband bill,Airtel,799,UPI,Bills
+Movie ticket,BookMyShow,450,UPI,Entertainment
+Gaming purchase,Steam,999,Debit Card,Entertainment
+Cinema snacks,PVR,550,UPI,Entertainment
+Hospital consultation,Apollo Hospital,800,UPI,Healthcare
+Medicine purchase,Apollo Pharmacy,650,UPI,Healthcare
+Medical test,Diagnostic Centre,1200,Debit Card,Healthcare
+College semester fee,College,45000,Bank Transfer,Education
+Online course,Udemy,599,Credit Card,Education
+Book purchase,Book Store,750,UPI,Education
+Flight booking,IndiGo,6500,Credit Card,Travel
+Hotel booking,MakeMyTrip,4200,UPI,Travel
+Train ticket,IRCTC,850,UPI,Travel
+Mutual fund SIP,Groww,5000,UPI,Investment
+Stock investment,Zerodha,3000,UPI,Investment
+PPF contribution,Bank,5000,Bank Transfer,Investment
+Monthly house rent,Landlord,8000,UPI,Rent
+Hostel rent,Hostel,6500,UPI,Rent
+Room rent,Landlord,7000,Bank Transfer,Rent
+Netflix monthly plan,Netflix,649,Credit Card,Subscriptions
+Spotify Premium,Spotify,119,UPI,Subscriptions
+YouTube Premium,YouTube,149,Credit Card,Subscriptions
+Unknown UPI transfer,Unknown,500,UPI,Other
+Cash withdrawal,ATM,2000,Cash,Other
+Miscellaneous payment,Unknown,350,UPI,Other

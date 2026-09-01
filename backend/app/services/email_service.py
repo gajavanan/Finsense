@@ -12,7 +12,29 @@ def _smtp_configured() -> bool:
     return bool(settings.SMTP_HOST and settings.SMTP_USER and settings.SMTP_PASSWORD)
 
 def _smtp_from() -> str:
+    # For Gmail SMTP, MUST use authenticated user as sender; do not use noreply@finsense.app
     return settings.SMTP_FROM or settings.SMTP_USER or settings.EMAIL_FROM
+
+def _email_provider() -> str:
+    return (getattr(settings, "EMAIL_PROVIDER", "auto") or "auto").lower()
+
+def _should_use_smtp() -> bool:
+    provider = _email_provider()
+    if provider == "smtp":
+        return _smtp_configured()
+    if provider == "resend":
+        return False
+    # auto: prefer SMTP when configured
+    return _smtp_configured()
+
+def _should_use_resend() -> bool:
+    if not settings.RESEND_API_KEY or settings.RESEND_API_KEY == "dummy":
+        return False
+    provider = _email_provider()
+    if provider == "smtp":
+        # Explicit SMTP in dev: ignore dummy Resend key
+        return False
+    return True
 
 def _log_safe(action: str, recipient: str, success: bool, error: str = ""):
     # NEVER log password, token, JWT
@@ -101,11 +123,12 @@ async def send_login_notification(email: str, name: str, user_agent: str = "", b
       <p>Regards,<br>FinSense Security Team</p>
     </div>
     """
-    # Prefer SMTP if configured, else Resend
-    if _smtp_configured():
+    # Explicit provider selection: EMAIL_PROVIDER=smtp ignores Resend dummy
+    print(f"[EMAIL] Provider: {_email_provider()} | SMTP configured: {_smtp_configured()} | Resend configured: {_should_use_resend()}")
+    if _should_use_smtp():
         res = _send_smtp(email, subject, html)
         return {"smtp": res}
-    if settings.RESEND_API_KEY and settings.RESEND_API_KEY != "dummy":
+    if _should_use_resend():
         try:
             import resend
             resend.api_key = settings.RESEND_API_KEY
@@ -143,9 +166,9 @@ async def send_verification_email(email: str, name: str, token: str):
       </div>
     </div>
     """
-    print(f"[EMAIL VERIFICATION] Recipient: {email} | SMTP configured: {_smtp_configured()} | FRONTEND_URL: {settings.FRONTEND_URL}")
+    print(f"[EMAIL VERIFICATION] Recipient: {email} | Provider: {_email_provider()} | SMTP configured: {_smtp_configured()} | FRONTEND_URL: {settings.FRONTEND_URL}")
 
-    if _smtp_configured():
+    if _should_use_smtp():
         res = _send_smtp(email, subject, html)
         if res.get("ok"):
             print(f"[EMAIL VERIFICATION] Email sent: true to {email}")
@@ -155,7 +178,7 @@ async def send_verification_email(email: str, name: str, token: str):
             # Do not swallow - raise so caller can log
             raise Exception(res.get("error"))
 
-    if settings.RESEND_API_KEY and settings.RESEND_API_KEY != "dummy":
+    if _should_use_resend():
         try:
             import resend
             resend.api_key = settings.RESEND_API_KEY
@@ -175,12 +198,12 @@ async def send_password_reset_email(email: str, name: str, token: str):
     link = f"{settings.FRONTEND_URL}/reset-password?token={token}"
     subject = "FinSense – Password Reset"
     html = f"""<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto;padding:24px"><h2>Password Reset</h2><p>Hello {name},</p><p>Click <a href='{link}'>here</a> to reset password. Link expires in 1 hour.</p><p>{link}</p></div>"""
-    if _smtp_configured():
+    if _should_use_smtp():
         res = _send_smtp(email, subject, html)
         if res.get("ok"):
             return {"ok": True}
         raise Exception(res.get("error"))
-    if settings.RESEND_API_KEY and settings.RESEND_API_KEY != "dummy":
+    if _should_use_resend():
         import resend
         resend.api_key = settings.RESEND_API_KEY
         return resend.Emails.send({"from": settings.EMAIL_FROM, "to": [email], "subject": subject, "html": html})
@@ -188,10 +211,10 @@ async def send_password_reset_email(email: str, name: str, token: str):
     return {"mock": True}
 
 async def send_generic_email(to: str, subject: str, html: str):
-    if _smtp_configured():
+    if _should_use_smtp():
         res = _send_smtp(to, subject, html)
         return {"ok": res.get("ok"), "error": res.get("error")}
-    if settings.RESEND_API_KEY and settings.RESEND_API_KEY != "dummy":
+    if _should_use_resend():
         import resend
         resend.api_key = settings.RESEND_API_KEY
         return resend.Emails.send({"from": settings.EMAIL_FROM, "to": [to], "subject": subject, "html": html})
@@ -199,23 +222,23 @@ async def send_generic_email(to: str, subject: str, html: str):
     return {"mock": True}
 
 async def send_test_email(to_email: str):
-    subject = "FinSense – SMTP Test Email"
+    subject = "FinSense SMTP Test"
     html = f"""
     <div style="font-family:Arial,sans-serif;padding:24px">
       <h2>FinSense SMTP Test</h2>
-      <p>This is a test email from FinSense backend.</p>
+      <p>This is a test email from FinSense.</p>
       <p>SMTP_HOST: {settings.SMTP_HOST}</p>
       <p>Time: {datetime.utcnow().isoformat()} UTC</p>
       <p>If you received this, SMTP is working correctly.</p>
     </div>
     """
-    print(f"[EMAIL TEST] Recipient: {to_email} | SMTP configured: {_smtp_configured()}")
-    if _smtp_configured():
+    print(f"[EMAIL TEST] Recipient: {to_email} | Provider: {_email_provider()} | SMTP configured: {_smtp_configured()}")
+    if _should_use_smtp():
         res = _send_smtp(to_email, subject, html)
         if not res.get("ok"):
             raise Exception(res.get("error"))
         return {"ok": True}
-    if settings.RESEND_API_KEY and settings.RESEND_API_KEY != "dummy":
+    if _should_use_resend():
         import resend
         resend.api_key = settings.RESEND_API_KEY
         r = resend.Emails.send({"from": settings.EMAIL_FROM, "to": [to_email], "subject": subject, "html": html})

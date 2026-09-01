@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from app.core.security import get_current_user
 from app.core.database import get_db
@@ -14,11 +14,13 @@ import os
 router=APIRouter()
 
 @router.post("/ml/predict/category")
+@router.post("/predict/category")
 async def ml_category(req: CategoryPredictRequest, user: User = Depends(get_current_user)):
     res = predict_category(req.description, req.merchant, req.amount, req.payment_method)
     return res
 
 @router.post("/ml/predict/spending")
+@router.post("/predict/spending")
 async def ml_spending(req: SpendingForecastRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     txs=db.query(Transaction).filter(Transaction.user_id==user.id, Transaction.type=="expense").order_by(Transaction.date).limit(200).all()
     from collections import defaultdict
@@ -31,6 +33,7 @@ async def ml_spending(req: SpendingForecastRequest, user: User = Depends(get_cur
     return result
 
 @router.post("/ml/detect/anomaly")
+@router.post("/detect/anomaly")
 async def ml_anomaly(req: AnomalyRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     txs=db.query(Transaction.amount).filter(Transaction.user_id==user.id, Transaction.type=="expense").limit(100).all()
     hist=[float(x[0]) for x in txs]
@@ -38,6 +41,7 @@ async def ml_anomaly(req: AnomalyRequest, user: User = Depends(get_current_user)
     return result
 
 @router.post("/ml/recommend/budget")
+@router.post("/recommend/budget")
 async def ml_budget(req: BudgetRecommendRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     txs=db.query(Transaction).filter(Transaction.user_id==user.id).limit(200).all()
     dicts=[{"type":t.type,"category":t.category,"amount":float(t.amount),"date":t.date.isoformat()} for t in txs]
@@ -45,6 +49,7 @@ async def ml_budget(req: BudgetRecommendRequest, user: User = Depends(get_curren
     return res
 
 @router.post("/ml/predict/goal")
+@router.post("/predict/goal")
 async def ml_goal(req: GoalPredictRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     txs=db.query(Transaction).filter(Transaction.user_id==user.id).all()
     hist_rate=None
@@ -56,6 +61,54 @@ async def ml_goal(req: GoalPredictRequest, user: User = Depends(get_current_user
     except: pass
     result = predict_goal(req.target_amount, req.current_amount, req.monthly_contribution, hist_rate)
     return result
+
+@router.post("/ml/upload-dataset")
+async def upload_ml_dataset(file: UploadFile = File(...), user: User = Depends(get_current_user)):
+    if not file.filename.lower().endswith(".csv"):
+        raise HTTPException(400, "Only .csv files allowed")
+    contents = await file.read()
+    if len(contents) > 5*1024*1024:
+        raise HTTPException(400, "File too large. Max 5MB")
+    if len(contents) == 0:
+        raise HTTPException(400, "Empty file")
+    
+    from app.services.csv_parser import parse_ml_dataset_csv
+    try:
+        parsed = parse_ml_dataset_csv(contents)
+    except Exception as e:
+        raise HTTPException(400, f"Failed to parse ML dataset: {str(e)}")
+        
+    # Write to target files
+    import pathlib
+    import pandas as pd
+    
+    valid_data = parsed["valid_rows_data"]
+    df_new = pd.DataFrame(valid_data, columns=["description", "merchant", "amount", "payment_method", "category"])
+    
+    base = pathlib.Path(__file__).resolve().parent.parent # backend/app
+    paths_to_write = [
+        base / "ml" / "data" / "training_data.csv",
+        base.parent / "data" / "training_data.csv"
+    ]
+    
+    written_paths = []
+    for p in paths_to_write:
+        try:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            df_new.to_csv(p, index=False)
+            written_paths.append(str(p))
+        except Exception as e:
+            print(f"[ML UPLOAD] failed to write to {p}: {e}")
+            
+    if not written_paths:
+        raise HTTPException(500, "Failed to save dataset to disk.")
+        
+    return {
+        "total_rows": parsed["total_rows"],
+        "valid_count": parsed["valid_count"],
+        "invalid_count": parsed["invalid_count"],
+        "categories_detected": parsed["categories_detected"]
+    }
 
 @router.post("/ml/train")
 async def ml_train(user: User = Depends(get_current_user)):
