@@ -9,6 +9,12 @@ frontend/.env
 frontend/.env.*
 !frontend/.env.example
 
+# Credentials & Service Accounts
+serviceAccountKey.json
+firebase-adminsdk*.json
+*firebase-adminsdk*.json
+*.pem
+
 # Databases
 *.db
 *.sqlite

@@ -8,7 +8,6 @@ import Protected from './routes/Protected'
 import Login from './pages/auth/Login'
 import Register from './pages/auth/Register'
 import ForgotPassword from './pages/auth/ForgotPassword'
-import VerifyEmail from './pages/auth/VerifyEmail'
 import ResetPassword from './pages/auth/ResetPassword'
 import Landing from './pages/Landing'
 import Dashboard from './pages/Dashboard'
@@ -45,7 +44,6 @@ function AppInner(){
         <Route path="/login" element={<Login/>}/>
         <Route path="/register" element={<Register/>}/>
         <Route path="/forgot-password" element={<ForgotPassword/>}/>
-        <Route path="/verify-email" element={<VerifyEmail/>}/>
         <Route path="/reset-password" element={<ResetPassword/>}/>
         <Route path="/dashboard" element={<Protected><Layout><Dashboard/></Layout></Protected>}/>
         <Route path="/transactions" element={<Protected><Layout><Transactions/></Layout></Protected>}/>

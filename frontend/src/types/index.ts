@@ -1,3 +1,12 @@
+export interface User {
+  id: string;
+  email: string;
+  full_name?: string;
+  phone_number?: string;
+  phone_verified?: boolean;
+  is_verified?: boolean;
+}
+
 export interface Transaction { id:string; date:string; description:string; amount:number; type:string; category:string; payment_method?:string; merchant?:string; account?:string; notes?:string}
 export interface Budget { id:string; category:string; amount:number; period:string; spent?:number; remaining?:number; pct?:number}
 export interface Goal { id:string; name:string; target_amount:number; current_amount:number; target_date?:string}

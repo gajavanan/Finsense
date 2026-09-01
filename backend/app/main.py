@@ -46,6 +46,16 @@ def _ensure_phase1_columns():
                     if "duplicate column" not in msg and "already exists" not in msg:
                         print(f"[MIGRATION] {table}.{col} add skipped: {ex}")
 
+        if insp.has_table("users"):
+            add_col("users", "phone_number", "phone_number VARCHAR(20)")
+            add_col("users", "phone_verified", "phone_verified BOOLEAN DEFAULT FALSE")
+            add_col("users", "phone_verified_at", "phone_verified_at TIMESTAMP WITH TIME ZONE")
+            try:
+                with engine.begin() as conn:
+                    conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_phone_number ON users(phone_number)"))
+            except Exception:
+                pass
+
         if insp.has_table("transactions"):
             add_col("transactions", "transaction_type", "transaction_type VARCHAR")
             add_col("transactions", "subcategory", "subcategory VARCHAR")
@@ -95,7 +105,10 @@ async def _startup_diagnostics():
     # Production-safe startup logging without exposing secrets or credentials
     try:
         db_type = "SQLite" if settings.DATABASE_URL.startswith("sqlite") else "PostgreSQL (Neon)"
-        provider = (getattr(settings, "EMAIL_PROVIDER", "smtp") or "smtp").upper()
+        firebase_ready = bool(
+            (settings.FIREBASE_PROJECT_ID and settings.FIREBASE_CLIENT_EMAIL and settings.FIREBASE_PRIVATE_KEY)
+            or (settings.FIREBASE_CREDENTIALS_PATH and os.path.isfile(settings.FIREBASE_CREDENTIALS_PATH))
+        )
 
         print("==================================================")
         print(f"[STARTUP] FinSense API starting up...")
@@ -103,10 +116,10 @@ async def _startup_diagnostics():
         print(f"[STARTUP] Database Engine: {db_type}")
         print(f"[STARTUP] Frontend URL: {settings.FRONTEND_URL}")
         print(f"[STARTUP] CORS Allowed Origins: {settings.cors_origins_list}")
-        print(f"[STARTUP] Email Provider: {provider}")
-        print(f"[STARTUP] SMTP Host: {settings.SMTP_HOST or 'NOT SET'}")
-        print(f"[STARTUP] SMTP User Configured: {bool(settings.SMTP_USERNAME)}")
-        print(f"[STARTUP] SMTP Password Configured: {bool(settings.SMTP_PASSWORD)}")
+        print(f"[STARTUP] Phone Auth Provider: Firebase Phone Authentication")
+        print(f"[STARTUP] Firebase Admin Configured: {firebase_ready}")
+        if settings.APP_ENV == "production" and not firebase_ready:
+            print("[STARTUP WARNING] Firebase Admin credentials missing in production!")
         print("==================================================")
     except Exception as e:
         print(f"[STARTUP] Diagnostic log notice: {e}")

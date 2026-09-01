@@ -16,7 +16,10 @@ class User(Base):
     email = Column(String, unique=True, nullable=False, index=True)
     hashed_password = Column(String, nullable=False)
     full_name = Column(String, nullable=True)
-    is_verified = Column(Boolean, default=False)
+    phone_number = Column(String, unique=True, nullable=True, index=True)
+    phone_verified = Column(Boolean, default=False, nullable=False)
+    phone_verified_at = Column(DateTime(timezone=True), nullable=True)
+    is_verified = Column(Boolean, default=False)  # legacy alias
     verification_token = Column(String, nullable=True)
     verification_token_expires = Column(DateTime, nullable=True)
     reset_token = Column(String, nullable=True)

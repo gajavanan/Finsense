@@ -32,10 +32,16 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     GROQ_API_KEY: str = ""
 
-    # Email provider: smtp | resend | auto
-    EMAIL_PROVIDER: str = "smtp"
+    # Firebase Admin (Phone Authentication)
+    FIREBASE_PROJECT_ID: Optional[str] = None
+    FIREBASE_CLIENT_EMAIL: Optional[str] = None
+    FIREBASE_PRIVATE_KEY: Optional[str] = None
+    FIREBASE_CREDENTIALS_PATH: Optional[str] = None
+
+    # Email provider (strictly for password reset emails): auto | resend | smtp
+    EMAIL_PROVIDER: str = "auto"
     RESEND_API_KEY: str = ""
-    EMAIL_FROM: str = "FinSense <noreply@finsense.app>"
+    EMAIL_FROM: str = "FinSense <onboarding@resend.dev>"
 
     # SMTP Configuration
     SMTP_HOST: str = ""
@@ -101,6 +107,12 @@ class Settings(BaseSettings):
             # 3. FRONTEND_URL validation
             if not self.FRONTEND_URL or "localhost" in self.FRONTEND_URL or "127.0.0.1" in self.FRONTEND_URL:
                 errors.append("FRONTEND_URL must be configured with your production frontend domain (e.g., https://your-domain.vercel.app).")
+
+            # 4. Firebase credentials in production
+            has_firebase_env = bool(self.FIREBASE_PROJECT_ID and self.FIREBASE_CLIENT_EMAIL and self.FIREBASE_PRIVATE_KEY)
+            has_firebase_file = bool(self.FIREBASE_CREDENTIALS_PATH and os.path.isfile(self.FIREBASE_CREDENTIALS_PATH))
+            if not has_firebase_env and not has_firebase_file:
+                errors.append("Firebase Admin credentials (FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY) must be configured in production.")
 
             if errors:
                 raise ValueError(
