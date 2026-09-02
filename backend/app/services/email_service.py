@@ -1,7 +1,6 @@
 """
 FinSense Email Service
-NOTE: Account registration verification has been migrated to Firebase Phone Authentication.
-This email service is retained exclusively for:
+Used for:
 1. Forgot Password / Password Reset links
 2. Security notifications (e.g. login alerts)
 """

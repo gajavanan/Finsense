@@ -113,26 +113,10 @@ Configure these in Render under **Environment Variables**:
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | Access token lifespan in minutes | `1440` |
 | `FRONTEND_URL` | Production Vercel domain | `https://finsense-lovat.vercel.app` |
 | `ALLOWED_ORIGINS` | Comma-separated allowed CORS origins | `https://finsense-lovat.vercel.app` |
-| `FIREBASE_PROJECT_ID` | Firebase Project ID | `<YOUR_FIREBASE_PROJECT_ID>` |
-| `FIREBASE_CLIENT_EMAIL` | Firebase Service Account Client Email | `<SERVICE_ACCOUNT_EMAIL>` |
-| `FIREBASE_PRIVATE_KEY` | Firebase Service Account Private Key (keep full key with `\n`) | `-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n` |
 | `EMAIL_PROVIDER` | Email provider (for password resets) | `resend` |
 | `RESEND_API_KEY` | Resend HTTPS API Key (for password reset emails) | `re_123456789...` |
 | `EMAIL_FROM` | Verified sender or Resend sandbox sender | `FinSense <onboarding@resend.dev>` |
 | `OPENAI_API_KEY` | Optional OpenAI key for AI Financial Advisor | `<YOUR_OPENAI_KEY>` |
-
-> [!IMPORTANT]
-> **Firebase Phone Authentication Setup:**
-> FinSense uses **Firebase Phone Authentication** for secure mobile number verification during registration.
-> 
-> ### Firebase Console & Credentials Setup
-> 1. Open the [Firebase Console](https://console.firebase.google.com).
-> 2. Create or select your **FinSense** project.
-> 3. Go to **Authentication -> Sign-in method** and enable the **Phone** provider.
-> 4. Go to **Authentication -> Settings -> Authorized domains** and add your production Vercel domain (e.g. `finsense-lovat.vercel.app`) and `localhost`.
-> 5. Go to **Project Settings -> General -> Your apps**, register a Web App, and copy the config keys for Vercel frontend.
-> 6. Go to **Project Settings -> Service accounts** and click **Generate new private key** to download your service account JSON.
-> 7. Configure `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, and `FIREBASE_PRIVATE_KEY` in Render Dashboard under **Environment Variables**. (Never commit the JSON file to source control).
 
 > [!TIP]
 > Generate a cryptographically secure `JWT_SECRET_KEY` in your terminal using:
@@ -147,15 +131,9 @@ Configure in Vercel under **Project Settings -> Environment Variables**:
 | Variable Name | Description | Example / Placeholder |
 |---|---|---|
 | `VITE_API_URL` | Public HTTPS URL of the Render backend | `https://finsense-api.onrender.com` |
-| `VITE_FIREBASE_API_KEY` | Firebase Web API Key | `AIzaSy...` |
-| `VITE_FIREBASE_AUTH_DOMAIN` | Firebase Auth Domain | `finsense-app.firebaseapp.com` |
-| `VITE_FIREBASE_PROJECT_ID` | Firebase Project ID | `finsense-app` |
-| `VITE_FIREBASE_STORAGE_BUCKET` | Firebase Storage Bucket | `finsense-app.appspot.com` |
-| `VITE_FIREBASE_MESSAGING_SENDER_ID` | Firebase Cloud Messaging Sender ID | `1234567890` |
-| `VITE_FIREBASE_APP_ID` | Firebase Web App ID | `1:1234567890:web:...` |
 
 > [!WARNING]
-> Never add `FIREBASE_PRIVATE_KEY`, `DATABASE_URL`, or `JWT_SECRET_KEY` to Vercel environment variables. Vite injects variables prefixed with `VITE_` into client-side JavaScript bundles visible to any visitor.
+> Never add `DATABASE_URL`, `JWT_SECRET_KEY`, or `SMTP_PASSWORD` to Vercel environment variables. Vite injects variables prefixed with `VITE_` into client-side JavaScript bundles visible to any visitor.
 
 ---
 

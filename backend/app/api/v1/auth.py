@@ -6,16 +6,48 @@ from typing import Optional
 import uuid
 import secrets
 import logging
+import re
 from app.core.database import get_db
 from app.core.security import get_password_hash, verify_password, create_access_token, get_current_user
 from app.models import User, Profile, LoginEvent
 from app.core.config import settings
 from app.services.email_service import send_login_notification, send_password_reset_email, send_test_email
-from app.services.firebase_service import verify_firebase_phone_token
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# -----------------------------------------------------------------------------
+# Phone Number Helper
+# -----------------------------------------------------------------------------
+
+def normalize_indian_phone(phone: str) -> str:
+    """
+    Validates and normalizes an Indian mobile number to E.164 (+91XXXXXXXXXX).
+    Requires:
+      - Exactly 10 digits
+      - First digit must be 6, 7, 8, or 9
+    """
+    if not phone or not isinstance(phone, str):
+        raise ValueError("Mobile number is required.")
+
+    clean = phone.strip().replace(" ", "").replace("-", "")
+    if clean.startswith("+91"):
+        digits = clean[3:]
+    elif clean.startswith("91") and len(clean) == 12:
+        digits = clean[2:]
+    elif clean.startswith("0") and len(clean) == 11:
+        digits = clean[1:]
+    else:
+        digits = clean
+
+    if len(digits) != 10 or not digits.isdigit():
+        raise ValueError("Please enter a valid 10-digit mobile number.")
+
+    if digits[0] not in {"6", "7", "8", "9"}:
+        raise ValueError("Indian mobile numbers must start with 6, 7, 8, or 9.")
+
+    return f"+91{digits}"
 
 # -----------------------------------------------------------------------------
 # Request & Response Schemas
@@ -25,8 +57,8 @@ class RegisterRequest(BaseModel):
     name: Optional[str] = None
     full_name: Optional[str] = None
     email: EmailStr
+    phone_number: str
     password: str
-    firebase_id_token: str
 
 class LoginRequest(BaseModel):
     email: EmailStr
@@ -61,61 +93,58 @@ def _ua_parse(ua: str):
     return browser, os, device
 
 # -----------------------------------------------------------------------------
-# Registration with Firebase Phone Authentication
+# Registration Endpoint (Direct Email + Password + Profile Mobile)
 # -----------------------------------------------------------------------------
 
 @router.post("/auth/register")
 async def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     """
-    Register a new user verified via Firebase Phone Authentication:
-    1. Validate email format and password length.
-    2. Verify the Firebase ID token using Firebase Admin SDK.
-    3. Extract the verified phone number from the cryptographically verified token claims.
-    4. Ensure email and verified phone number are not already registered.
-    5. Create user in FinSense database with phone_verified=True.
+    Register a new user:
+    1. Validate full name.
+    2. Validate email address.
+    3. Validate 10-digit Indian mobile number.
+    4. Validate password (min 6 chars).
+    5. Check whether email already exists.
+    6. Check whether phone number already exists.
+    7. Hash password using bcrypt.
+    8. Create user directly in PostgreSQL with phone_verified=False and phone_verified_at=None.
+    9. Return standard FinSense registration response.
     """
-    email_norm = payload.email.strip().lower()
     user_name = (payload.full_name or payload.name or "").strip()
-
     if not user_name:
         raise HTTPException(400, "Full name is required")
 
     if len(payload.password) < 6:
         raise HTTPException(400, "Password must be at least 6 characters")
 
-    # 1. Verify Firebase ID token and extract phone number
+    # Validate and normalize Indian mobile number
     try:
-        verified_phone = verify_firebase_phone_token(payload.firebase_id_token)
+        norm_phone = normalize_indian_phone(payload.phone_number)
     except ValueError as ve:
         raise HTTPException(400, str(ve))
-    except RuntimeError as re:
-        logger.error(f"[REGISTER] Firebase service error: {re}")
-        raise HTTPException(500, "Firebase authentication service is temporarily unavailable.")
-    except Exception as e:
-        logger.error(f"[REGISTER] Unexpected verification error: {type(e).__name__}")
-        raise HTTPException(400, "Unable to verify phone number via Firebase.")
 
-    # 2. Check for duplicate email
+    email_norm = payload.email.strip().lower()
+
+    # Check duplicate email
     if db.query(User).filter(User.email == email_norm).first():
         raise HTTPException(400, "Email already registered")
 
-    # 3. Check for duplicate phone number
-    if db.query(User).filter(User.phone_number == verified_phone).first():
-        raise HTTPException(400, "This mobile number is already registered to another account")
+    # Check duplicate phone number
+    if db.query(User).filter(User.phone_number == norm_phone).first():
+        raise HTTPException(400, "Mobile number already registered")
 
-    # 4. Hash password and persist user
+    # Hash password and create user
     hashed = get_password_hash(payload.password)
-    now_utc = datetime.now(timezone.utc)
 
     user = User(
         id=str(uuid.uuid4()),
         email=email_norm,
-        phone_number=verified_phone,
-        phone_verified=True,
-        phone_verified_at=now_utc,
+        phone_number=norm_phone,
+        phone_verified=False,
+        phone_verified_at=None,
         hashed_password=hashed,
         full_name=user_name,
-        is_verified=True,  # legacy alias
+        is_verified=True,
     )
     db.add(user)
     profile = Profile(id=user.id, full_name=user_name, email=user.email)
@@ -130,12 +159,11 @@ async def register(payload: RegisterRequest, db: Session = Depends(get_db)):
             "email": user.email,
             "full_name": user.full_name,
             "phone_number": user.phone_number,
-            "phone_verified": True
         }
     }
 
 # -----------------------------------------------------------------------------
-# Authentication & Session Management
+# Authentication & Session Management (Email + Password -> JWT)
 # -----------------------------------------------------------------------------
 
 @router.post("/auth/login")
@@ -150,19 +178,7 @@ async def login(payload: LoginRequest, request: Request, db: Session = Depends(g
             detail={"code": "INVALID_CREDENTIALS", "message": "Invalid email or password"}
         )
 
-    # 2. Phone Verification Check
-    # Existing users with phone_verified=True log in normally.
-    # If phone is not verified, prompt user cleanly without crashing.
-    if not user.phone_verified:
-        raise HTTPException(
-            status_code=403,
-            detail={
-                "code": "PHONE_NOT_VERIFIED",
-                "message": "Your phone number is not verified. Please register with a verified mobile number."
-            }
-        )
-
-    # 3. Verified User - Issue FinSense JWT Access Token
+    # 2. Issue FinSense JWT Access Token (stateless, email+password auth)
     token = create_access_token({"sub": user.id, "email": user.email})
     ua = request.headers.get("user-agent", "")
     browser, os_name, device = _ua_parse(ua)
@@ -205,7 +221,6 @@ async def login(payload: LoginRequest, request: Request, db: Session = Depends(g
             "email": user.email,
             "full_name": user.full_name,
             "phone_number": user.phone_number,
-            "phone_verified": user.phone_verified
         }
     }
 
@@ -216,8 +231,7 @@ async def me(user: User = Depends(get_current_user)):
         "email": user.email,
         "full_name": user.full_name,
         "phone_number": user.phone_number,
-        "phone_verified": user.phone_verified,
-        "is_verified": user.phone_verified
+        "is_verified": user.is_verified
     }
 
 @router.post("/auth/logout")
@@ -225,7 +239,7 @@ async def logout(user: User = Depends(get_current_user)):
     return {"status": "ok"}
 
 # -----------------------------------------------------------------------------
-# Password Reset Flow (Email-based)
+# Password Reset Flow (Email-based via Resend / SMTP)
 # -----------------------------------------------------------------------------
 
 @router.post("/auth/forgot-password")

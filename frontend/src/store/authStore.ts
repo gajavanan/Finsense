@@ -7,7 +7,7 @@ interface AuthState {
   loading: boolean;
   init: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
-  register: (name: string, email: string, password: string, firebase_id_token: string) => Promise<any>;
+  register: (name: string, email: string, phone_number: string, password: string) => Promise<any>;
   logout: () => Promise<void>;
   setUser: (u: any) => void;
 }
@@ -35,13 +35,13 @@ export const useAuthStore = create<AuthState>((set) => ({
     setToken(data.access_token)
     set({ user: data.user })
   },
-  register: async (name, email, password, firebase_id_token) => {
+  register: async (name, email, phone_number, password) => {
     const normEmail = email.trim().toLowerCase()
     const { data } = await api.post('/auth/register', {
       name,
       email: normEmail,
-      password,
-      firebase_id_token
+      phone_number,
+      password
     })
     return data
   },

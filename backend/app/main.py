@@ -105,10 +105,6 @@ async def _startup_diagnostics():
     # Production-safe startup logging without exposing secrets or credentials
     try:
         db_type = "SQLite" if settings.DATABASE_URL.startswith("sqlite") else "PostgreSQL (Neon)"
-        firebase_ready = bool(
-            (settings.FIREBASE_PROJECT_ID and settings.FIREBASE_CLIENT_EMAIL and settings.FIREBASE_PRIVATE_KEY)
-            or (settings.FIREBASE_CREDENTIALS_PATH and os.path.isfile(settings.FIREBASE_CREDENTIALS_PATH))
-        )
 
         print("==================================================")
         print(f"[STARTUP] FinSense API starting up...")
@@ -116,10 +112,6 @@ async def _startup_diagnostics():
         print(f"[STARTUP] Database Engine: {db_type}")
         print(f"[STARTUP] Frontend URL: {settings.FRONTEND_URL}")
         print(f"[STARTUP] CORS Allowed Origins: {settings.cors_origins_list}")
-        print(f"[STARTUP] Phone Auth Provider: Firebase Phone Authentication")
-        print(f"[STARTUP] Firebase Admin Configured: {firebase_ready}")
-        if settings.APP_ENV == "production" and not firebase_ready:
-            print("[STARTUP WARNING] Firebase Admin credentials missing in production!")
         print("==================================================")
     except Exception as e:
         print(f"[STARTUP] Diagnostic log notice: {e}")

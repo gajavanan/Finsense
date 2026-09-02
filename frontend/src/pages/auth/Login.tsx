@@ -39,10 +39,7 @@ export default function Login() {
       const detail = (e as any).response?.data?.detail
       const code = typeof detail === 'object' ? detail?.code : (e as any).code
 
-      if (code === 'PHONE_NOT_VERIFIED' || status === 403) {
-        setErr('Your mobile number is not verified. Please register with a verified mobile number.')
-        toast.error('Mobile number not verified.')
-      } else if (code === 'INVALID_CREDENTIALS' || status === 401 || msg.includes('Invalid email or password')) {
+      if (code === 'INVALID_CREDENTIALS' || status === 401 || msg.includes('Invalid email or password')) {
         setErr('Invalid email or password')
         toast.error('Invalid email or password')
       } else if (status === 0 || msg.includes('Failed to fetch') || msg.includes('Network Error')) {
