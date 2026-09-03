@@ -8,7 +8,8 @@ Privacy: Never store/log customer ID, account number, phone, email, address, IFS
 """
 import io, re, pandas as pd
 from datetime import datetime
-from typing import List, Dict, Tuple
+import math
+from typing import List, Dict, Tuple, Optional, Any, Set
 
 # --- helpers ---
 def _parse_date_safe(s: str):
@@ -361,109 +362,454 @@ def normalize_transaction(raw: Dict) -> Dict:
         desc = raw.get("description","").strip()
     return raw
 
+# ==============================================================================
+# ML Training Dataset Normalization, Alias Mapping & Parsing
+# ==============================================================================
+
+ML_COLUMN_ALIASES: Dict[str, List[str]] = {
+    "description": [
+        "description",
+        "transaction description",
+        "transaction_description",
+        "narration",
+        "details",
+        "transaction details",
+        "transaction_details",
+        "remarks",
+        "remark",
+        "particulars",
+        "purpose",
+        "note",
+        "notes",
+        "transaction note",
+        "transaction type",
+        "transaction_type",
+        "type",
+        "txn type",
+    ],
+    "merchant": [
+        "merchant",
+        "merchant name",
+        "merchant_name",
+        "payee",
+        "payee name",
+        "payee_name",
+        "receiver",
+        "receiver name",
+        "receiver_name",
+        "receiver bank",
+        "receiver_bank",
+        "beneficiary",
+        "beneficiary name",
+        "vendor",
+        "vendor name",
+        "store",
+        "store name",
+        "party",
+        "party name",
+    ],
+    "amount": [
+        "amount",
+        "amount inr",
+        "amount (inr)",
+        "amount_inr",
+        "transaction amount",
+        "transaction_amount",
+        "txn amount",
+        "total amount",
+        "debit",
+        "debit amount",
+        "inr",
+    ],
+    "payment_method": [
+        "payment method",
+        "payment_method",
+        "paymentmethod",
+        "mode",
+        "payment mode",
+        "payment_mode",
+        "payment type",
+        "payment_type",
+        "txn mode",
+        "device type",
+        "device_type",
+        "method",
+        "channel",
+        "payment channel",
+        "network type",
+        "network_type",
+    ],
+    "category": [
+        "category",
+        "transaction category",
+        "transaction_category",
+        "merchant category",
+        "merchant_category",
+        "expense category",
+        "expense_category",
+        "cat",
+        "label",
+        "classification",
+        "tag",
+    ],
+}
+
+ML_CANONICAL_NAMES: Dict[str, str] = {
+    "description": "Description",
+    "merchant": "Merchant",
+    "amount": "Amount",
+    "payment_method": "Payment Method",
+    "category": "Category",
+}
+
+CATEGORY_SYNONYMS: Dict[str, str] = {
+    "utilities": "Bills",
+    "utility": "Bills",
+    "bill": "Bills",
+    "bills": "Bills",
+    "grocery": "Food",
+    "groceries": "Food",
+    "fuel": "Transport",
+    "petrol": "Transport",
+    "diesel": "Transport",
+    "dining": "Food",
+    "restaurant": "Food",
+    "restaurants": "Food",
+    "e-commerce": "Shopping",
+    "ecommerce": "Shopping",
+    "medical": "Healthcare",
+    "medicine": "Healthcare",
+    "pharma": "Healthcare",
+    "pharmacy": "Healthcare",
+}
+
+ALLOWED_CATEGORIES: Set[str] = {
+    "Food", "Shopping", "Transport", "Bills", "Entertainment",
+    "Healthcare", "Education", "Travel", "Investment", "Rent",
+    "Subscriptions", "Other"
+}
+
+
+def normalize_header_name(header: Any) -> str:
+    """
+    Normalizes a CSV header string for robust alias matching:
+    - Strips leading/trailing whitespace
+    - Removes UTF-8 BOM (\ufeff)
+    - Converts to lowercase
+    - Replaces underscores with spaces
+    - Collapses repeated whitespace
+    """
+    if header is None:
+        return ""
+    h = str(header).strip().lstrip("\ufeff").lower()
+    h = h.replace("_", " ")
+    h = re.sub(r"\s+", " ", h)
+    return h.strip()
+
+
+def match_ml_columns(headers: List[str]) -> Tuple[Dict[str, int], List[str]]:
+    """
+    Given a list of column headers from a CSV row or df.columns,
+    maps each of the 5 required fields ('description', 'merchant', 'amount', 'payment_method', 'category')
+    to a unique column index using ML_COLUMN_ALIASES.
+
+    Returns:
+        (col_mapping, missing_canonical_names)
+        e.g. ({"description": 0, "merchant": 1, ...}, [])
+    """
+    normalized_headers = [normalize_header_name(h) for h in headers]
+    # Punctuation-stripped version (e.g. "amount inr" from "amount (inr)")
+    cleaned_headers = [re.sub(r'[\(\)\[\]\{\}]', '', nh).strip() for nh in normalized_headers]
+
+    col_mapping: Dict[str, int] = {}
+    used_indices: Set[int] = set()
+
+    # Prioritize specific targets first so compound names like 'merchant_category'
+    # match 'category' rather than generic 'merchant'
+    target_priority = ["category", "amount", "merchant", "description", "payment_method"]
+
+    for target in target_priority:
+        aliases = ML_COLUMN_ALIASES[target]
+        matched_idx = None
+
+        # Pass 1: Exact normalized alias match
+        for alias in aliases:
+            norm_alias = normalize_header_name(alias)
+            clean_alias = re.sub(r'[\(\)\[\]\{\}]', '', norm_alias).strip()
+            for idx, (nh, ch) in enumerate(zip(normalized_headers, cleaned_headers)):
+                if idx in used_indices:
+                    continue
+                if nh == norm_alias or ch == clean_alias or nh == clean_alias:
+                    matched_idx = idx
+                    break
+            if matched_idx is not None:
+                break
+
+        # Pass 2: Substring / token match for multi-character aliases if no exact match
+        if matched_idx is None:
+            for alias in aliases:
+                norm_alias = normalize_header_name(alias)
+                if len(norm_alias) < 4:
+                    continue
+                for idx, nh in enumerate(normalized_headers):
+                    if idx in used_indices:
+                        continue
+                    if re.search(r'\b' + re.escape(norm_alias) + r'\b', nh):
+                        matched_idx = idx
+                        break
+                if matched_idx is not None:
+                    break
+
+        if matched_idx is not None:
+            col_mapping[target] = matched_idx
+            used_indices.add(matched_idx)
+
+    missing_targets = [
+        ML_CANONICAL_NAMES[target]
+        for target in ["description", "merchant", "amount", "payment_method", "category"]
+        if target not in col_mapping
+    ]
+
+    return col_mapping, missing_targets
+
+
+def load_ml_dataframe(raw_bytes: bytes) -> pd.DataFrame:
+    """
+    Loads raw CSV bytes into a pandas DataFrame:
+    - Tries utf-8-sig (for UTF-8 with BOM), utf-8, and latin1
+    - Skips introductory metadata lines before the delimited table
+    - Automatically detects delimiters (, ; \t)
+    """
+    encodings = ["utf-8-sig", "utf-8", "latin1"]
+    last_exc = None
+
+    for enc in encodings:
+        try:
+            text = raw_bytes.decode(enc)
+            lines = text.splitlines()
+            if not lines:
+                continue
+
+            # Scan up to the first 15 lines to locate where the tabular data begins
+            start_line_idx = 0
+            for idx, line in enumerate(lines[:15]):
+                line_str = line.strip()
+                if not line_str:
+                    continue
+                found_start = False
+                for delim in [",", ";", "\t"]:
+                    parts = [p.strip() for p in line_str.split(delim)]
+                    if len(parts) >= 2:
+                        mapping, _ = match_ml_columns(parts)
+                        if len(mapping) >= 3 or len(parts) >= 4:
+                            start_line_idx = idx
+                            found_start = True
+                            break
+                if found_start:
+                    break
+
+            tabular_text = "\n".join(lines[start_line_idx:])
+
+            # Try python engine automatic delimiter detection
+            try:
+                df = pd.read_csv(
+                    io.StringIO(tabular_text),
+                    sep=None,
+                    engine="python",
+                    dtype=str,
+                    keep_default_na=False,
+                    on_bad_lines="skip"
+                )
+                if df.shape[1] >= 2:
+                    return df
+            except Exception:
+                pass
+
+            # Fallback to standard delimiters
+            for sep in [",", ";", "\t"]:
+                try:
+                    df = pd.read_csv(
+                        io.StringIO(tabular_text),
+                        sep=sep,
+                        dtype=str,
+                        keep_default_na=False,
+                        on_bad_lines="skip"
+                    )
+                    if df.shape[1] >= 2:
+                        return df
+                except Exception:
+                    continue
+        except UnicodeDecodeError as ude:
+            last_exc = ude
+            continue
+
+    # Final fallback directly with BytesIO
+    try:
+        return pd.read_csv(io.BytesIO(raw_bytes), dtype=str, keep_default_na=False, engine="python", on_bad_lines="skip")
+    except Exception as e:
+        raise ValueError(f"Failed to read CSV: {last_exc or e}")
+
+
+def clean_amount_str(val: Any) -> Optional[str]:
+    """
+    Cleans and validates an amount value:
+    - Removes currency symbols (₹, $, Rs., Rs, INR)
+    - Removes commas and whitespace
+    - Converts to numeric float
+    - Returns formatted string e.g. "1250.50" or None if invalid
+    """
+    if val is None:
+        return None
+    s = str(val).strip()
+    if not s or s.lower() == "nan":
+        return None
+    # Remove currency symbols and commas
+    s = re.sub(r'[₹\$,]', '', s)
+    s = re.sub(r'^(rs\.?|inr)\s*', '', s, flags=re.IGNORECASE).strip()
+    s = re.sub(r'\s*(rs\.?|inr)$', '', s, flags=re.IGNORECASE).strip()
+    try:
+        num = float(s)
+        if math.isnan(num) or math.isinf(num) or num <= 0:
+            return None
+        return f"{num:.2f}"
+    except (ValueError, TypeError):
+        return None
+
+
 def is_ml_dataset(raw_bytes: bytes) -> bool:
     """
     Check if the CSV represents an ML training dataset.
-    It returns True if there is a row containing description, merchant, and category columns.
+    Returns True if at least Category and either Description or Merchant are detected.
     """
     try:
-        df_raw = pd.read_csv(io.BytesIO(raw_bytes), header=None, dtype=str, keep_default_na=False, engine='python', on_bad_lines='skip')
-    except Exception as e:
-        print(f"[is_ml_dataset] read failed: {e}")
-        return False
-    
-    for idx, row in df_raw.iterrows():
-        row_cells = [str(v).strip().lower() for v in row.values if str(v).strip()]
-        has_desc = any("description" in cell or "narration" in cell or cell == "details" for cell in row_cells)
-        has_merchant = any("merchant" in cell or "payee" in cell for cell in row_cells)
-        has_category = any("category" in cell or "cat" in cell or cell == "label" for cell in row_cells)
-        if has_desc and has_merchant and has_category:
+        df = load_ml_dataframe(raw_bytes)
+        if df.empty:
+            return False
+        col_mapping, _ = match_ml_columns([str(c) for c in df.columns])
+        if "category" in col_mapping and ("description" in col_mapping or "merchant" in col_mapping):
             return True
+        for r_idx in range(min(5, len(df))):
+            row_mapping, _ = match_ml_columns([str(v) for v in df.iloc[r_idx].values])
+            if "category" in row_mapping and ("description" in row_mapping or "merchant" in row_mapping):
+                return True
+    except Exception as e:
+        print(f"[is_ml_dataset] check error: {e}")
     return False
+
 
 def parse_ml_dataset_csv(raw_bytes: bytes) -> Dict:
     """
-    Find header row, parse rows, normalize columns and validate category.
+    Find header row, parse rows, normalize columns, validate and clean data for ML training.
+    Supports flexible column aliases, extra columns, encoding/delimiter detection,
+    amount normalization, and category standardization.
     """
-    df = pd.read_csv(io.BytesIO(raw_bytes), header=None, dtype=str, keep_default_na=False, engine='python', on_bad_lines='skip')
-    
-    # Find header row
-    header_row_idx = None
-    for idx, row in df.iterrows():
-        row_values = [str(val).strip().lower() for val in row.values]
-        has_desc = any("description" in cell for cell in row_values)
-        has_merchant = any("merchant" in cell for cell in row_values)
-        has_amount = any("amount" in cell for cell in row_values)
-        has_pay = any("payment" in cell or "mode" in cell for cell in row_values)
-        has_cat = any("category" in cell or "cat" in cell or "label" in cell for cell in row_values)
-        if has_desc and has_merchant and has_amount and has_pay and has_cat:
-            header_row_idx = idx
-            break
-            
-    if header_row_idx is None:
-        raise ValueError("ML training dataset header row not found. Expected columns: Description, Merchant, Amount, Payment Method, Category.")
-        
-    df_data = df.iloc[header_row_idx + 1:]
-    raw_headers = [str(h).strip() for h in df.iloc[header_row_idx].values]
-    
-    # Map headers to target columns
-    col_mapping = {}
-    for idx, h in enumerate(raw_headers):
-        hl = h.lower()
-        if "description" in hl:
-            col_mapping["description"] = idx
-        elif "merchant" in hl:
-            col_mapping["merchant"] = idx
-        elif "amount" in hl:
-            col_mapping["amount"] = idx
-        elif "payment" in hl or "mode" in hl:
-            col_mapping["payment_method"] = idx
-        elif "category" in hl or "cat" in hl or "label" in hl:
-            col_mapping["category"] = idx
+    df = load_ml_dataframe(raw_bytes)
+    if df.empty:
+        raise ValueError("The uploaded CSV file is empty.")
 
-    # Check if we mapped description and category
-    if "description" not in col_mapping or "category" not in col_mapping:
-        raise ValueError("Could not map Description or Category columns.")
-        
+    # 1. Check df.columns first
+    raw_headers = [str(c) for c in df.columns]
+    col_mapping, missing = match_ml_columns(raw_headers)
+
+    df_data = df
+    if not missing:
+        df_data = df
+    else:
+        # 2. Check introductory rows for a valid header row
+        scan_limit = min(10, len(df))
+        for r_idx in range(scan_limit):
+            candidate_headers = [str(val) for val in df.iloc[r_idx].values]
+            candidate_mapping, candidate_missing = match_ml_columns(candidate_headers)
+            if not candidate_missing:
+                col_mapping = candidate_mapping
+                missing = []
+                df_data = df.iloc[r_idx + 1:].reset_index(drop=True)
+                raw_headers = candidate_headers
+                break
+            if len(candidate_missing) < len(missing):
+                missing = candidate_missing
+
+    if missing:
+        missing_str = ", ".join(missing)
+        raise ValueError(f"Missing required ML column: {missing_str}")
+
     total_rows = len(df_data)
     valid_rows = []
     invalid_count = 0
     categories_detected = set()
-    
-    ALLOWED_CATEGORIES = {
-        "Food", "Shopping", "Transport", "Bills", "Entertainment",
-        "Healthcare", "Education", "Travel", "Investment", "Rent",
-        "Subscriptions", "Other"
-    }
+
     allowed_lower = {cat.lower(): cat for cat in ALLOWED_CATEGORIES}
-    
-    for idx, row in df_data.iterrows():
+
+    desc_idx = col_mapping["description"]
+    merch_idx = col_mapping["merchant"]
+    amt_idx = col_mapping["amount"]
+    pay_idx = col_mapping["payment_method"]
+    cat_idx = col_mapping["category"]
+
+    for _, row in df_data.iterrows():
         row_vals = list(row.values)
-        
-        # Extract fields safely using our mapping
-        desc = row_vals[col_mapping["description"]].strip() if col_mapping.get("description") is not None and col_mapping["description"] < len(row_vals) else ""
-        merch = row_vals[col_mapping["merchant"]].strip() if col_mapping.get("merchant") is not None and col_mapping["merchant"] < len(row_vals) else ""
-        amount = row_vals[col_mapping["amount"]].strip() if col_mapping.get("amount") is not None and col_mapping["amount"] < len(row_vals) else ""
-        pay = row_vals[col_mapping["payment_method"]].strip() if col_mapping.get("payment_method") is not None and col_mapping["payment_method"] < len(row_vals) else ""
-        cat = row_vals[col_mapping["category"]].strip() if col_mapping.get("category") is not None and col_mapping["category"] < len(row_vals) else ""
-        
-        # Validation
-        cat_lower = cat.lower()
-        if not desc or not cat or cat_lower not in allowed_lower:
+
+        desc_raw = row_vals[desc_idx] if desc_idx < len(row_vals) else ""
+        merch_raw = row_vals[merch_idx] if merch_idx < len(row_vals) else ""
+        amt_raw = row_vals[amt_idx] if amt_idx < len(row_vals) else ""
+        pay_raw = row_vals[pay_idx] if pay_idx < len(row_vals) else ""
+        cat_raw = row_vals[cat_idx] if cat_idx < len(row_vals) else ""
+
+        # 1. Amount cleaning & validation
+        clean_amt = clean_amount_str(amt_raw)
+        if clean_amt is None:
             invalid_count += 1
             continue
-            
-        normalized_cat = allowed_lower[cat_lower]
+
+        # 2. Category cleaning & validation (supervised ML target)
+        cat_clean = str(cat_raw or "").strip()
+        if not cat_clean or cat_clean.lower() == "nan":
+            invalid_count += 1
+            continue
+
+        cat_lower = cat_clean.lower()
+        if cat_lower in CATEGORY_SYNONYMS:
+            normalized_cat = CATEGORY_SYNONYMS[cat_lower]
+        elif cat_lower in allowed_lower:
+            normalized_cat = allowed_lower[cat_lower]
+        else:
+            normalized_cat = cat_clean.title()
+
         categories_detected.add(normalized_cat)
-        
+
+        # 3. Description & Merchant cleaning
+        desc_clean = str(desc_raw or "").strip()
+        merch_clean = str(merch_raw or "").strip()
+        pay_clean = str(pay_raw or "").strip()
+
+        if desc_clean.lower() == "nan":
+            desc_clean = ""
+        if merch_clean.lower() == "nan":
+            merch_clean = ""
+        if pay_clean.lower() == "nan":
+            pay_clean = ""
+
+        # Ensure at least description or merchant has text
+        if not desc_clean:
+            if merch_clean:
+                desc_clean = merch_clean
+            elif pay_clean:
+                desc_clean = f"Payment via {pay_clean}"
+            else:
+                invalid_count += 1
+                continue
+
+        if not pay_clean:
+            pay_clean = "UPI"
+
         valid_rows.append({
-            "description": desc,
-            "merchant": merch,
-            "amount": amount,
-            "payment_method": pay,
+            "description": desc_clean,
+            "merchant": merch_clean,
+            "amount": clean_amt,
+            "payment_method": pay_clean,
             "category": normalized_cat
         })
-        
+
     return {
         "total_rows": total_rows,
         "valid_rows_data": valid_rows,
@@ -471,3 +817,4 @@ def parse_ml_dataset_csv(raw_bytes: bytes) -> Dict:
         "invalid_count": invalid_count,
         "categories_detected": sorted(list(categories_detected))
     }
+

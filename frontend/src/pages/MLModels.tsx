@@ -144,7 +144,7 @@ export default function MLModels() {
                     {uploadLoading ? 'Validating CSV...' : file ? file.name : 'Upload Training CSV'}
                   </div>
                   <div className="text-xs text-slate-400 max-w-sm">
-                    Supports columns: Description, Merchant, Amount (INR), Payment Method, Category. Header row detected automatically.
+                    Required columns: Description, Merchant, Amount, Payment Method, Category. Common variations such as Amount (INR), Payment_Method and Merchant Name are supported.
                   </div>
                 </div>
               </div>
